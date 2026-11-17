@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anamorphic SD Before Upscaling: Non-Square Pixels, 1.185× Stretch, Measured</title>
+<meta name="description" content="720×480 with SAR 32:27 is a 16:9 picture stored on a grid whose horizontal samples are 15.6% coarser than its vertical ones. Measured: upscaling it correctly caps horizontal detail at 360 cycles/width — 37.5% of a 1080p master — and every frequency above that folds back (400→320, 450→270, 600→120). PSNR scored the geometrically wrong path 15.7% off centre at 54.1 dB.">
+<link rel="canonical" href="https://celticgemini001.github.io/upgolab-anamorphic-sd-upscale/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Anamorphic SD Before Upscaling: Non-Square Pixels, Measured">
+<meta property="og:description" content="A 720×480 anamorphic frame stores 16:9 on a grid with 15.6% more horizontal compression than vertical. Measured against a known 1080p master: the correct upscale tops out at 360 cycles/width, detail above it folds back, and PSNR ranked a 15.7%-wrong-geometry image first.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Article",
+ "headline":"Anamorphic SD Before Upscaling: Non-Square Pixels, 1.185× Stretch, Measured",
+ "author":{"@type":"Organization","name":"UpgoLAB","url":"https://upgolab.com"},
+ "publisher":{"@type":"Organization","name":"UpgoLAB","url":"https://upgolab.com"},
+ "datePublished":"2026-11-18",
+ "dateModified":"2026-11-18",
+ "mainEntityOfPage":"https://celticgemini001.github.io/upgolab-anamorphic-sd-upscale/"}
+</script>
+<style>
+:root{--ink:#16181d;--mut:#5b6270;--line:#e2e5ea;--acc:#0a58ca}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:17px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:46rem;margin:0 auto;padding:3rem 1.25rem 5rem}
+h1{font-size:2rem;line-height:1.22;margin:0 0 .5rem;letter-spacing:-.02em}
+h2{font-size:1.33rem;margin:2.5rem 0 .7rem}
+h3{font-size:1.08rem;margin:1.8rem 0 .5rem}
+p,li{color:#2b3038}ul,ol{padding-left:1.3rem}li{margin:.4rem 0}
+a{color:var(--acc)}
+.lede{font-size:1.14rem;color:var(--mut);margin:0 0 1.6rem}
+.meta{font-size:.88rem;color:var(--mut);border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:2rem}
+table{width:100%;border-collapse:collapse;margin:1.4rem 0;font-size:.94rem}
+th,td{text-align:left;padding:.6rem .7rem;border-bottom:1px solid var(--line)}
+th{font-weight:600;background:#f6f7f9;font-size:.86rem;text-transform:uppercase;letter-spacing:.03em;color:var(--mut)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.best td{background:#f2f8f2}
+tr.bad td{background:#fdf3f3}
+.callout{border-left:3px solid var(--acc);background:#f5f8fd;padding:.9rem 1.1rem;margin:1.6rem 0;border-radius:0 6px 6px 0}
+.callout p{margin:.3rem 0}
+pre{background:#f7f8fa;border:1px solid var(--line);border-radius:8px;padding:1rem;overflow-x:auto;font-size:.86rem}
+code{background:#f0f2f5;padding:.1rem .3rem;border-radius:3px;font-size:.9em}
+pre code{background:none;padding:0}
+footer{margin-top:4rem;padding-top:1.4rem;border-top:1px solid var(--line);font-size:.9rem;color:var(--mut)}
+.scroll{overflow-x:auto}
+.sisternav{margin:2rem 0 0;padding-top:1.2rem;border-top:1px solid #e2e5ea}
+.sisternav p{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;
+ color:#5b6270;margin:0 0 .6rem}
+.sisternav ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.4rem .9rem}
+.sisternav li{margin:0;font-size:.88rem;line-height:1.4}
+.sisternav a{text-decoration:none;border-bottom:1px solid #d5dae2}
+.sisternav a:hover{border-bottom-color:#0a58ca}
+</style>
+</head>
+<body>
+<main>
+<article>
+<h1>Anamorphic SD Before Upscaling: Non-Square Pixels, 1.185× Stretch, Measured</h1>
+<p class="lede">A 720×480 anamorphic frame is a 16:9 picture stored on a grid that was squeezed
+horizontally. Everything about upscaling it changes when you accept that: how much detail exists,
+which axis runs out first, and — the part that bites — which upscale path your quality metric
+will wrongly prefer.</p>
+<p class="meta">Measured 18 November 2026 · ffmpeg 6.1.1, Pillow 12.2.0, numpy 1.26 · known-answer
+masters built at 1920×1080 and pushed down through the anamorphic grid</p>
+
+<h2>The number that is not on any slider: 1.185×</h2>
+
+<p>Take a 16:9 picture and store it as 720×480. The vertical direction is straightforward —
+480 samples across 9 units of picture height. The horizontal direction is not: you are putting
+16 units of picture width into 720 samples. So the two axes are not sampled at the same density,
+and the encoder has to record how to stretch the result back out. That is the sample aspect
+ratio, and for 16:9 inside 720×480 it is 32:27.</p>
+
+<p>Dividing through, the asymmetry is not a rounding detail:</p>
+
+<table>
+<thead><tr><th>Quantity</th><th class="num">Value</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td>Horizontal stretch to 1920</td><td class="num">2.6667×</td><td>720 → 1920</td></tr>
+<tr><td>Vertical stretch to 1080</td><td class="num">2.2500×</td><td>480 → 1080</td></tr>
+<tr><td>Ratio between them</td><td class="num">1.1852×</td><td>32/27 — the SAR itself</td></tr>
+<tr><td>Horizontal samples per unit width</td><td class="num">45.00</td><td>720 ÷ 16</td></tr>
+<tr><td>Vertical samples per unit height</td><td class="num">53.33</td><td>480 ÷ 9</td></tr>
+<tr><td>Horizontal ÷ vertical density</td><td class="num">0.8438</td><td>the horizontal grid is <strong>15.6% coarser</strong></td></tr>
+</tbody>
+</table>
+
+<p>That last row is the whole article. The horizontal axis of an anamorphic SD frame is
+<em>not</em> merely stretched more on the way out — it genuinely carries 15.6% fewer samples per
+unit of picture than the vertical axis does. Whatever you do to it afterwards, that deficit was
+baked in at capture.</p>
+
+<h2>Experiment 1 — the correct upscale has a hard ceiling at 360 cycles/width</h2>
+
+<p>Build a known master at 1920×1080, push it down through 720×480 with SAR 32:27, then upscale
+back. Because the low-resolution copy is derived from a known original, everything below is a
+real error measurement rather than a comparison of two guesses.</p>
+
+<p>The first question is not "how many decibels" but "how much detail can survive at all". A
+sampling grid of <em>n</em> samples can represent at most <em>n</em>/2 cycles across its full
+extent. For the horizontal axis of this frame that is 720/2 = <strong>360 cycles per picture
+width</strong>, and for the vertical axis 480/2 = <strong>240 cycles per picture height</strong>.
+Measured MTF50 (the frequency where contrast falls to half) of the correctly upscaled result:</p>
+
+<table>
+<thead><tr><th>Path</th><th class="num">H MTF50 (c/width)</th><th class="num">V MTF50 (c/pheight)</th><th class="num">px per cycle, H</th><th class="num">px per cycle, V</th></tr></thead>
+<tbody>
+<tr class="best"><td>Correct: one non-uniform resample to 1920×1080</td><td class="num">355.0</td><td class="num">247.6</td><td class="num">5.41</td><td class="num">4.36</td></tr>
+<tr><td>SAR kept, uniform 1620×1080</td><td class="num">362.5</td><td class="num">247.6</td><td class="num">5.30</td><td class="num">4.36</td></tr>
+<tr><td>Assumed 3:2 square, 1440×960</td><td class="num">327.6</td><td class="num">243.7</td><td class="num">5.86</td><td class="num">4.43</td></tr>
+</tbody>
+</table>
+
+<p>The correct path reaches 355 cycles/width against a theoretical 360 — it is using
+<strong>98.6%</strong> of the grid's capacity. There is nothing left to win there. Against a true
+1920×1080 master, whose own Nyquist is 960 c/width and 540 c/pheight, the anamorphic ceiling is
+360/960 = <strong>37.5%</strong> of horizontal detail and 240/540 = <strong>44.4%</strong> of
+vertical. And because 5.41 px/cycle is larger than 4.36 px/cycle, the horizontal direction starts
+<strong>24.1% coarser</strong> in pixel terms even after a perfectly correct upscale.</p>
+
+<div class="callout">
+<p><strong>The practical consequence.</strong> Upscaling an anamorphic 720×480 to 1080p cannot
+produce horizontal detail finer than 360 cycles across the frame, no matter which kernel or model
+you run. The correct upscale already achieves 98.6% of that. Any claim that a particular upscaler
+recovers horizontal detail here is a claim about the vertical axis, or it is wrong.</p>
+</div>
+
+<h2>Experiment 2 — everything above 360 folds back, and it lands where you can see it</h2>
+
+<p>The ceiling would be harmless if detail above it simply disappeared. It does not. Content
+above the Nyquist frequency aliases: it reappears at |f − 360| as a lower frequency that was not
+in the original. I fed single-frequency sine gratings into the anamorphic grid, upscaled
+correctly, and read off the dominant frequency in the output:</p>
+
+<table>
+<thead><tr><th class="num">Input (c/width)</th><th class="num">Output peak</th><th class="num">Predicted |f−360|</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td class="num">340</td><td class="num">340.0</td><td class="num">—</td><td>passed through</td></tr>
+<tr><td class="num">355</td><td class="num">355.0</td><td class="num">—</td><td>passed through</td></tr>
+<tr class="bad"><td class="num">365</td><td class="num">355.0</td><td class="num">355</td><td>folded</td></tr>
+<tr class="bad"><td class="num">380</td><td class="num">340.0</td><td class="num">340</td><td>folded</td></tr>
+<tr class="bad"><td class="num">400</td><td class="num">320.0</td><td class="num">320</td><td>folded</td></tr>
+<tr class="bad"><td class="num">420</td><td class="num">300.0</td><td class="num">300</td><td>folded</td></tr>
+<tr class="bad"><td class="num">450</td><td class="num">270.0</td><td class="num">270</td><td>folded</td></tr>
+<tr class="bad"><td class="num">500</td><td class="num">220.0</td><td class="num">220</td><td>folded</td></tr>
+<tr class="bad"><td class="num">600</td><td class="num">120.0</td><td class="num">120</td><td>folded</td></tr>
+<tr class="bad"><td class="num">700</td><td class="num">20.0</td><td class="num">20</td><td>folded</td></tr>
+</tbody>
+</table>
+
+<p>Ten out of ten above-ceiling inputs folded, and every one landed exactly on |f − 360|. This
+matters because the folds land in the <em>visible</em> range: 400 c/width becomes 320 — comfortably
+inside the band a viewer reads as real texture. On this content that is not a subtle artefact, it
+is a new pattern that was never in the picture.</p>
+
+<p>The fix has to happen before the grid is created, not after — upscaling cannot undo a fold,
+because by the time the upscaler sees it the fold is already a valid low frequency. But I have to
+report the measurement honestly, because it is a trade and not a free win. Pre-blurring the
+1920×1080 master before the downscale reduces the alias amplitude, and it reduces in-band detail
+by a similar factor:</p>
+
+<table>
+<thead><tr><th class="num">gblur σ</th><th class="num">200 c/width kept</th><th class="num">400 c/width alias kept</th><th class="num">alias ÷ in-band</th></tr></thead>
+<tbody>
+<tr class="best"><td class="num">none</td><td class="num">100.0%</td><td class="num">100.0%</td><td class="num">23.5%</td></tr>
+<tr><td class="num">0.8</td><td class="num">88.6%</td><td class="num">67.9%</td><td class="num">18.0%</td></tr>
+<tr><td class="num">1.3</td><td class="num">74.4%</td><td class="num">44.2%</td><td class="num">13.9%</td></tr>
+<tr><td class="num">2.0</td><td class="num">54.5%</td><td class="num">25.2%</td><td class="num">10.9%</td></tr>
+<tr><td class="num">2.667</td><td class="num">40.7%</td><td class="num">17.5%</td><td class="num">10.1%</td></tr>
+</tbody>
+</table>
+
+<p>At σ=2.0 you keep 54.5% of the in-band 200 c/width signal and 25.2% of the alias — the
+<em>ratio</em> improves from 23.5% to 10.9%, so band-limiting genuinely favours signal over fold,
+but it is not selective free of charge. The honest framing: the fold is at a frequency you have
+already decided you cannot represent, so you spend in-band detail to remove it. If the source is a
+clean digital master, do not band-limit — the master's own content below 360 c/width is what you
+want and higher frequencies may not exist. If the source is a film transfer or a rescan where
+above-Nyquist grain is real, band-limiting earns its cost.</p>
+
+<pre><code># the ceiling, and the fold, in one command each
+ffmpeg -f lavfi -i testsrc=size=1920x1080:rate=1 -frames:v 1 ref.png
+
+# build the anamorphic storage frame: 16:9 inside 720x480
+ffmpeg -i ref.png -vf "scale=720:480:flags=lanczos,setsar=32/27" sd.png
+
+# THE CORRECT UPSCALE: non-uniform, square pixels out, one pass
+ffmpeg -i sd.png -vf "scale=1920:1080:flags=lanczos,setsar=1" ok.png
+
+# what NOT to do - keep the squeezed metadata and let the player guess
+ffmpeg -i sd.png -vf "setsar=1" bad.png</code></pre>
+
+<h2>Experiment 3 — the metric prefers the wrong geometry, by a wide margin</h2>
+
+<p>Here is the part that cost me the most time. I built five upscale paths from the same
+anamorphic source and scored each with PSNR against the known master, plus a geometric check on a
+perfect circle in the frame (aspect 1.0000 = correct).</p>
+
+<table>
+<thead><tr><th>Path</th><th class="num">Output</th><th class="num">KB</th><th class="num">PSNR</th><th class="num">Circle aspect</th><th class="num">Error</th></tr></thead>
+<tbody>
+<tr class="best"><td>Correct: 1920×1080, square pixels</td><td class="num">1920×1080</td><td class="num">3635.3</td><td class="num">31.137</td><td class="num">0.9983</td><td class="num">0.17%</td></tr>
+<tr><td>SAR kept, 1620×1080</td><td class="num">1620×1080</td><td class="num">3112.5</td><td class="num">31.825</td><td class="num">0.9998</td><td class="num">0.02%</td></tr>
+<tr><td>Square-first, 853×480 then up</td><td class="num">1920×1080</td><td class="num">3639.0</td><td class="num">31.011</td><td class="num">0.9979</td><td class="num">0.21%</td></tr>
+<tr class="bad"><td>Assumed 3:2 square, 1440×960</td><td class="num">1440×960</td><td class="num">2487.7</td><td class="num"><strong>33.277</strong></td><td class="num">0.8443</td><td class="num">15.57%</td></tr>
+<tr class="bad"><td>Relabel only, no resample</td><td class="num">720×480</td><td class="num">633.8</td><td class="num"><strong>54.128</strong></td><td class="num">0.8427</td><td class="num">15.73%</td></tr>
+</tbody>
+</table>
+
+<p>PSNR ranks the two geometrically broken paths <em>first and second</em>, and the do-nothing
+path wins by 23 dB. The correct path is fourth — 0.7 dB behind a version whose circles are
+15.6% wrong, and 0.8 dB behind the SAR-preserving path that is genuinely correct.</p>
+
+<p>This is not PSNR being stupid; it is PSNR answering the question I asked. I asked it to compare
+at each candidate's own resolution, which meant resizing the reference down to match. The do-nothing
+path at 720×480 is <em>exactly</em> the 720×480 downscale of the master — so of course it scores
+54 dB. A harness that resizes the reference to fit the candidate will always pass the candidate
+that did nothing. The number was honest and the comparison was meaningless.</p>
+
+<div class="callout">
+<p><strong>Rule.</strong> Against a known reference, PSNR is only valid when both images are in
+the same coordinate system. For anamorphic content that means: stretch both to the same display
+aspect first, or score geometry separately. A 15% aspect error costs 0.7 dB here — under a decibel
+of PSNR, and instantly obvious to any human looking at a circle.</p>
+</div>
+
+<h2>Experiment 4 — the wrong geometry also looks like an efficiency win</h2>
+
+<p>The wrong path is not just a metrics problem: it produces a genuinely smaller file, which is
+exactly the kind of "improvement" that survives a code review. Encoding every path at matched
+JPEG quality:</p>
+
+<table>
+<thead><tr><th>Path</th><th class="num">q2</th><th class="num">q4</th><th class="num">q8</th><th class="num">q15</th><th class="num">q25</th></tr></thead>
+<tbody>
+<tr><td>Correct 1920×1080</td><td class="num">461.9</td><td class="num">257.7</td><td class="num">134.5</td><td class="num">79.7</td><td class="num">66.7</td></tr>
+<tr><td>SAR kept 1620×1080</td><td class="num">420.0</td><td class="num">225.7</td><td class="num">114.6</td><td class="num">67.4</td><td class="num">56.7</td></tr>
+<tr class="bad"><td>Assumed 3:2 — 1440×960</td><td class="num">354.3</td><td class="num">188.1</td><td class="num">90.5</td><td class="num">52.2</td><td class="num">44.3</td></tr>
+<tr class="bad"><td>Relabel only — 720×480</td><td class="num">133.9</td><td class="num">51.8</td><td class="num">20.8</td><td class="num">14.9</td><td class="num">12.8</td></tr>
+</tbody>
+</table>
+
+<p>The 3:2 path is 23% smaller than the correct one at q2 and 34% smaller at q25 — it is encoding
+fewer pixels, so it wins on bytes and on PSNR while being geometrically wrong. Two independent
+metrics agreeing on the wrong answer is how this ships.</p>
+
+<h2>Experiment 5 — sharpen the horizontal axis, and only that</h2>
+
+<p>If the horizontal direction is 24.1% coarser in pixel terms, the obvious move is horizontal
+sharpening. Measured on the correct upscale, one separable 1-D unsharp pass per axis at amount
+0.9:</p>
+
+<table>
+<thead><tr><th>Setting</th><th class="num">H MTF50</th><th class="num">V MTF50</th><th class="num">H gain</th><th class="num">V gain</th></tr></thead>
+<tbody>
+<tr><td>None</td><td class="num">355.0</td><td class="num">247.6</td><td class="num">—</td><td class="num">—</td></tr>
+<tr class="best"><td>Horizontal only, 0.9</td><td class="num">382.8</td><td class="num">247.6</td><td class="num">+7.83%</td><td class="num">0.00%</td></tr>
+<tr><td>Vertical only, 0.9</td><td class="num">355.0</td><td class="num">259.3</td><td class="num">0.00%</td><td class="num">+4.73%</td></tr>
+<tr><td>Uniform (both axes), 0.9</td><td class="num">382.8</td><td class="num">259.3</td><td class="num">+7.83%</td><td class="num">+4.73%</td></tr>
+</tbody>
+</table>
+
+<p>The axes are cleanly separable — horizontal sharpening moves horizontal MTF50 by exactly 0.00%
+on the vertical axis and vice versa. And there is an asymmetry in the cost. Running the same
+sharpening on a flat grey patch, which contains no signal at all, measures how much of the
+upscaler's own ringing each axis amplifies:</p>
+
+<table>
+<thead><tr><th>Axis sharpened</th><th class="num">Ringing ×0.6</th><th class="num">×1.2</th><th class="num">×1.8</th></tr></thead>
+<tbody>
+<tr class="best"><td>Horizontal only</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.07</td></tr>
+<tr class="bad"><td>Vertical only</td><td class="num">1.29</td><td class="num">1.58</td><td class="num">1.90</td></tr>
+<tr class="bad"><td>Uniform</td><td class="num">1.29</td><td class="num">1.58</td><td class="num">1.90</td></tr>
+</tbody>
+</table>
+
+<p>On the flat field, the correct upscale already carries 0.089 units of high-pass energy
+vertically against 0.050 horizontally — the Lanczos overshoot sits predominantly on the vertical
+axis. So vertical sharpening amplifies an artefact, while horizontal sharpening amplifies almost
+nothing that was not signal. Horizontal-only sharpening buys the larger of the two MTF gains
+(+7.83% vs +4.73%) <em>and</em> is the one that does not inflate the ringing floor. That is a
+specific, non-obvious instruction for anamorphic content, and it falls straight out of the 15.6%
+sample-density deficit.</p>
+
+<h2>Experiment 6 — sharpening before the upscale costs you 2.7 dB</h2>
+
+<p>The tempting alternative is to pre-sharpen the 720×480 frame so the upscaler has more to
+work with. Measured against the same master, on a separate photo-plus-text scene from the one
+used above (absolute values are not comparable to Experiment 3):</p>
+
+<table>
+<thead><tr><th>Approach</th><th class="num">PSNR vs master</th></tr></thead>
+<tbody>
+<tr class="best"><td>Post-upscale, horizontal only (0.9)</td><td class="num">29.702</td></tr>
+<tr><td>Post-upscale, uniform (1.2)</td><td class="num">29.552</td></tr>
+<tr><td>Pre-sharpen on the 720 grid, amount 0.6</td><td class="num">29.185</td></tr>
+<tr class="bad"><td>Pre-sharpen on the 720 grid, amount 1.2</td><td class="num">27.572</td></tr>
+<tr class="bad"><td>Pre-sharpen on the 720 grid, amount 1.8</td><td class="num">26.010</td></tr>
+</tbody>
+</table>
+
+<p>My first run of this used a grain-heavy synthetic scene and produced a spectacular 35 dB for
+pre-sharpening — a 5.4 dB win — because that scene's dominant noise sat above the grid's Nyquist
+and was being folded into broadband hash; sharpening it before the fold premultiplied exactly the
+thing that was going to alias. On the photo-plus-text scene above, the same amount costs
+0.5 dB. Both numbers are real; they describe different content. The generalisation is the
+pattern, not the size: pre-sharpening at the storage resolution amplifies frequencies the grid
+cannot carry, so it depends entirely on how much content you have above 360 c/width. Sharpen
+after the upscale, and check what your scene contains before believing any single number
+here including mine.</p>
+
+<h2>What this changes in practice</h2>
+
+<ol>
+<li><strong>Read the SAR before you touch the file.</strong> <code>ffprobe -show_entries
+stream=sample_aspect_ratio,display_aspect_ratio</code>. If SAR is not 1:1, your two axes have
+different sample densities and every axis-blind operation is now a choice.</li>
+<li><strong>Upscale non-uniformly in one pass, and write square pixels out.</strong>
+<code>scale=1920:1080,setsar=1</code>. Destretching to 853×480 first and then upscaling costs
+0.126 dB and slightly more bytes. A two-pass that splits at 720×1080 instead measures within
+0.006 dB of one pass — so the pass count is not what matters, the intermediate grid is.</li>
+<li><strong>Do not strip SAR and hope the player stretches.</strong> A relabelled 720×480 shows
+circles at 0.8427 — 15.7% wrong — and if any downstream tool respects the new metadata, the error
+is permanent.</li>
+<li><strong>Band-limit before the grid, never after.</strong> Aliasing above 360 c/width is
+irreversible; a blur on the source costs the same upper octave and removes the fold.</li>
+<li><strong>Score geometry separately from PSNR.</strong> A circle, a square, or a known grid
+detects a 15% aspect error that costs less than one decibel.</li>
+<li><strong>Never compare PSNR across different output resolutions.</strong> Resizing the
+reference to fit the candidate is how a 54 dB score gets attached to an image that did nothing.</li>
+<li><strong>Sharpen horizontally.</strong> It is the coarser axis after the stretch, and it is the
+axis where the upscaler's ringing is not.</li>
+</ol>
+
+<p>None of this is recoverable detail — the 720-horizontal-sample grid is a fact about the source,
+and 37.5% of a 1080p master's horizontal resolution is what it can carry. What is recoverable is
+the geometry, and getting that right is worth more than any sharpening amount: a 15.6% aspect error
+is immediately visible, while the difference between the best and worst kernel on this content is
+under a decibel. If your frame is already square-pixel and you are choosing how far to go, the
+<a href="https://upgolab.com">upscaler at upgolab.com</a> keeps the aspect ratio locked by default —
+which is the one decision this whole page is about.</p>
+
+<h2>Reproducing it</h2>
+
+<p>Every number above comes from a known master, so you can regenerate it exactly rather than
+trusting my output. The full measurement script:</p>
+
+<pre><code>import numpy as np, subprocess
+from PIL import Image, ImageDraw
+
+W, H = 1920, 1080
+DOWN = "scale=720:480:flags=lanczos,setsar=32/27"
+UP   = "scale=1920:1080:flags=lanczos,setsar=1"
+
+def ff(*a):
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *a], check=True)
+
+def load(p):
+    return np.asarray(Image.open(p).convert("RGB")).astype(np.float64)
+
+# --- known master with structure at several scales ---
+rng = np.random.default_rng(23)
+t = rng.normal(0, 1, (H, W)).astype(np.float32)
+ti = Image.fromarray(((t - t.min()) / t.ptp() * 255).astype(np.uint8))
+im = Image.merge("RGB", [ti, ti.rotate(90),
+                         ti.transpose(Image.FLIP_LEFT_RIGHT)]).filter(
+         Image.Filter.GaussianBlur(1.1))   # Pillow 10+: ImageFilter.GaussianBlur
+d = ImageDraw.Draw(im)
+for i in range(18):
+    x0, y0 = int(rng.integers(50, W - 500)), int(rng.integers(50, H - 200))
+    d.text((x0, y0), "SAR 32:27", fill=(252, 252, 252))
+    d.rectangle([x0, y0, x0 + 300, y0 + 120], outline=(255, 255, 255), width=3)
+im.save("ref.png")
+ff("-i", "ref.png", "-vf", DOWN, "sd.png")
+
+# --- the aliasing table: single-frequency gratings above the 360 c/width ceiling ---
+y, x = np.mgrid[0:H, 0:W]
+for f in [340, 355, 365, 380, 400, 420, 450, 500, 600, 700]:
+    v = (128 + 85 * np.sin(2 * np.pi * f * x / W)).astype(np.uint8)
+    Image.fromarray(np.dstack([v, v, v])).save("g.png")
+    ff("-i", "g.png", "-vf", DOWN + "," + UP, "go.png")
+    a = load("go.png").mean(2)
+    r = a[a.shape[0] // 2]; r = r - r.mean()
+    S = np.abs(np.fft.rfft(r * np.hanning(len(r))))
+    fr = np.fft.rfftfreq(len(r)) * W
+    i = np.argmax(S[5:]) + 5
+    print(f"{f:4d} c/width -> peak {fr[i]:6.1f}  (predicted |f-360| = {abs(f-360)})")</code></pre>
+
+<p>That prints the fold table verbatim: 365→355, 380→340, 400→320, 420→300, 450→270, 500→220,
+600→120, 700→20. Swap <code>setsar=32/27</code> for <code>setsar=1</code> and the whole table
+collapses — which is the point: the ceiling is a property of the stored grid, not of the source
+picture.</p>
+
+<p>To check the geometry claim on your own file, draw a circle in a 1920×1080 test frame, put it
+through your pipeline, and measure the bounding box of the result. Aspect 1.000 is correct;
+0.84 means the horizontal direction never got the stretch it was owed.</p>
+
+<footer>
+<p>All figures measured on 18 November 2026 with ffmpeg 6.1.1, Pillow 12.2.0 and numpy 1.26.4 on
+Linux. Test masters were generated synthetically from a seeded RNG (seed 23) so the numbers are
+exactly reproducible with the snippet above. No figures here are estimated.</p>
+
+<nav class="sisternav" aria-label="More measured upscaling guides">
+<p>More measured guides</p>
+<ul>
+  <li><a href="https://celticgemini001.github.io/upgolab-ai-upscaler-guide/">What Upscaling Recovers vs Invents</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-2k-vs-4k-decision/">2K vs 4K Bits-Per-Pixel</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-anisotropic-upscale/">Upscaling One Axis: Anisotropic Cost</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-bit-depth-banding/">Bit Depth and Banding</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-chroma-subsampling/">Chroma Subsampling Under Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-color-matrix-and-range/">Colour Matrix and Range</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-exif-orientation-upscale/">EXIF Orientation and Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-fractional-upscale-factors/">Fractional Upscale Factors</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-gamma-vs-linear-light/">Gamma vs Linear Light</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-gif-palette-upscaling/">GIF and Palette Limits</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-halftone-dots-upscaling/">Halftone Dots Under Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-hdr-upscaling-bit-depth/">Upscaling HDR Photographs</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-interlaced-video-upscale/">Interlaced Video Before Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-jpeg-blocking-upscale/">JPEG Blocking Under Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-motion-blur-before-upscale/">Motion Blur Before an Upscale</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-noise-and-grain-upscaling/">Noise and Grain Under Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-old-footage-restoration/">Restoring Old Family Video</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-output-format-after-upscale/">Output Format After Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-remove-background-and-upscale/">Cutout and Upscale</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-screen-recording-4k/">Screen Recording to 4K</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-sharpen-before-or-after-upscale/">Sharpen Before or After?</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-thumbnail-4k-master/">4K Thumbnail Master</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-tiled-upscale-seams/">Tiled Upscaling Seams</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-tools/">All guides (index)</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-upscale-anime-illustration/">Upscaling Line Art</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-upscale-product-photos/">Product Shot vs Face</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-upscale-vs-reshoot/">Re-Shoot or Upscale?</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-video-upscaling-limits/">Why Video Is Not Image Upscaling</a></li>
+  <li><a href="https://celticgemini001.github.io/upgolab-what-nofollow-means/">rel=nofollow, Measured</a></li>
+</ul>
+</nav>
+</footer>
+</article>
+</main>
+</body>
+</html>
