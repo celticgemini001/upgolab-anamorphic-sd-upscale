@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Anamorphic SD Before Upscaling: Non-Square Pixels, 1.185× Stretch, Measured</title>
-<meta name="description" content="720×480 with SAR 32:27 is a 16:9 picture stored on a grid whose horizontal samples are 15.6% coarser than its vertical ones. Measured: upscaling it correctly caps horizontal detail at 360 cycles/width — 37.5% of a 1080p master — and every frequency above that folds back (400→320, 450→270, 600→120). PSNR scored the geometrically wrong path 15.7% off centre at 54.1 dB.">
+<meta name="description" content="720×480 with SAR 32:27 stores 16:9 on a grid 15.6% coarser horizontally. Measured: the correct upscale caps detail at 360 cycles/width and everything above folds back (400→320, 600→120); PSNR ranked a 15.7%-wrong image first. Also measured: the destretch width cancels out (−0.008 dB for 852 vs 854), pad keeps the old SAR and produces an 18.5% stretch error, and 4:2:0 quantises chroma edges to a 2-pixel grid.">
 <link rel="canonical" href="https://celticgemini001.github.io/upgolab-anamorphic-sd-upscale/">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Anamorphic SD Before Upscaling: Non-Square Pixels, Measured">
-<meta property="og:description" content="A 720×480 anamorphic frame stores 16:9 on a grid with 15.6% more horizontal compression than vertical. Measured against a known 1080p master: the correct upscale tops out at 360 cycles/width, detail above it folds back, and PSNR ranked a 15.7%-wrong-geometry image first.">
+<meta property="og:description" content="A 720×480 anamorphic frame stores 16:9 on a grid 15.6% coarser horizontally. Measured against a known 1080p master: the correct upscale tops out at 360 cycles/width, detail above it folds back, PSNR ranked a 15.7%-wrong-geometry image first, and pad-without-setsar adds an 18.5% stretch error.">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Article",
  "headline":"Anamorphic SD Before Upscaling: Non-Square Pixels, 1.185× Stretch, Measured",
@@ -309,6 +309,132 @@ cannot carry, so it depends entirely on how much content you have above 360 c/wi
 after the upscale, and check what your scene contains before believing any single number
 here including mine.</p>
 
+<h2>Experiment 7 — the destretch width cancels out, and I was wrong about which one to pick</h2>
+
+<p>Advice in this space, including the version of this page published on 17 November, says a
+destretch has to land on an even width because 4:2:0 needs one. 720 × 32/27 = <strong>853.3333</strong>,
+which is not an integer, so people round to 852 or 854 and move on. I measured what that rounding
+actually costs, and the answer is: nothing measurable in geometry. The reasoning that made me care
+about it was wrong, and the correction matters more than the number.</p>
+
+<p>The argument for caring runs like this. Destretch 720 → 852 changes the horizontal scale by
+852/853.3333 = 0.99844; destretch to 854 changes it by 1.00078. So the two routes should disagree
+about the final aspect ratio by 0.23%. That is a plausible-sounding error and it does not
+survive measurement. A two-stage pipeline ends at 1920×1080 with <code>setsar=1</code>, and once
+the second stage renormalises to square pixels on a fixed output grid, both the numerator and the
+denominator of the intermediate aspect are rescaled by the same factor. The intermediate width
+cancels. What survives is only the resampling loss of having touched the frame twice.</p>
+
+<p>Measured on a master with two vertical edges 520.0 square-pixels apart (x = 100 and x = 620 in
+the 853.33-wide square-pixel frame), so the correct 1080p baseline is 520 × 2.25 =
+<strong>1170.000</strong> px. Edge positions are sub-pixel 50% crossings on a 41-row mean:</p>
+
+<table>
+<thead><tr><th>Route</th><th class="num">Left edge</th><th class="num">Right edge</th><th class="num">Baseline</th><th class="num">Error</th></tr></thead>
+<tbody>
+<tr class="best"><td>One pass, <code>scale=1920:1080</code></td><td class="num">223.51</td><td class="num">1394.17</td><td class="num">1170.66</td><td class="num">+0.057%</td></tr>
+<tr><td>Destretch 850 → 1080p</td><td class="num">223.44</td><td class="num">1394.15</td><td class="num">1170.71</td><td class="num">+0.061%</td></tr>
+<tr><td>Destretch 852 → 1080p</td><td class="num">223.44</td><td class="num">1394.23</td><td class="num">1170.79</td><td class="num">+0.068%</td></tr>
+<tr><td>Destretch 853 → 1080p</td><td class="num">223.49</td><td class="num">1394.19</td><td class="num">1170.70</td><td class="num">+0.060%</td></tr>
+<tr><td>Destretch 854 → 1080p</td><td class="num">223.56</td><td class="num">1394.08</td><td class="num">1170.52</td><td class="num">+0.044%</td></tr>
+<tr><td>Destretch 864×486 → 1080p</td><td class="num">223.55</td><td class="num">1394.23</td><td class="num">1170.67</td><td class="num">+0.058%</td></tr>
+<tr class="bad"><td><code>scale=1620:1080</code> then <code>setsar=1</code></td><td class="num">188.50</td><td class="num">1176.27</td><td class="num">987.77</td><td class="num">−15.575%</td></tr>
+</tbody>
+</table>
+
+<p>The spread across every even and odd destretch width is <strong>0.024 percentage points</strong>
+— 0.28 px on a 1170 px baseline, which is a quarter of one output pixel. The 850-vs-854 choice is
+not a decision. Stripping the SAR is a decision: −15.58%, and the failure is identical to the one
+in Experiment 2 because it is the same mistake.</p>
+
+<div class="callout">
+<p><strong>Correction to what this page said before.</strong> I previously framed the parity of the
+destretch width as a real constraint. It is a real constraint on the <em>encoder</em>, not on the
+image: measured across seven encoders at width 853, <code>libx264</code> and <code>libx265</code>
+refuse (<code>width not divisible by 2</code>), while <code>ffv1</code>, <code>prores_ks</code>,
+<code>mpeg4</code>, <code>libvpx-vp9</code> and <code>libaom-av1</code> all accept it. And on a
+two-stage pipeline the width does not need to be correct in the first place.</p>
+</div>
+
+<h2>Experiment 8 — 4:2:0 quantises the chroma edge to a 2-pixel grid, and that is the real cost</h2>
+
+<p>If the destretch width cancels in geometry, does anything about it matter? One thing does:
+<code>pad</code>. Padding 720×480 to 1920×1080 leaves the sample-aspect-ratio tag describing the
+old grid, so the output is labelled 32:27 at 1920×1080, which ffprobe reports as DAR
+<strong>512:243 = 2.107</strong> — an 18.52% stretch error on top of whatever the padding did.
+Padding is the one operation in this list that changes the frame size without touching the ratio,
+so it is the one that poisons the tag. <code>crop</code> has the same failure: cropping to 640×480
+keeps 32:27 and therefore reports a 1.5802 DAR for a 4:3 window.</p>
+
+<p>The chroma grid is the other thing, and this one is a genuine limit rather than a preference.
+In 4:2:0 the chroma plane is half-width, so a chroma edge can only land on even output columns.
+Sweeping a luma-plus-chroma step across the frame and destretching to 854×480, the luma edge
+tracks the ideal position to within a pixel but the chroma edge quantises:</p>
+
+<table>
+<thead><tr><th class="num">Ideal</th><th class="num">Luma edge</th><th class="num">Chroma edge</th><th class="num">Chroma error</th></tr></thead>
+<tbody>
+<tr><td class="num">60.05</td><td class="num">59.97</td><td class="num">57.50</td><td class="num">−2.55</td></tr>
+<tr><td class="num">120.09</td><td class="num">119.33</td><td class="num">119.50</td><td class="num">−0.59</td></tr>
+<tr><td class="num">180.14</td><td class="num">179.74</td><td class="num">179.50</td><td class="num">−0.64</td></tr>
+<tr><td class="num">240.19</td><td class="num">239.13</td><td class="num">239.50</td><td class="num">−0.69</td></tr>
+<tr><td class="num">300.23</td><td class="num">299.59</td><td class="num">299.50</td><td class="num">−0.73</td></tr>
+<tr><td class="num">360.28</td><td class="num">360.10</td><td class="num">361.50</td><td class="num">+1.22</td></tr>
+<tr><td class="num">420.33</td><td class="num">419.38</td><td class="num">417.50</td><td class="num">−2.83</td></tr>
+<tr><td class="num">600.47</td><td class="num">599.67</td><td class="num">599.50</td><td class="num">−0.97</td></tr>
+</tbody>
+</table>
+
+<p>Luma mean error is −0.547 px (max 1.056). Chroma mean error is −0.967 px with a max of
+<strong>2.83 px</strong>, and the residual after subtracting the luma error reaches 2.47 px. Every
+chroma value lands on a .50, i.e. on a chroma sample boundary, regardless of where the true edge
+is. That is the quantisation, and it is why a saturated edge on a strongly coloured subject can
+look 1–2 px out of register at 1080p while a luminance edge looks exact.</p>
+
+<p>4:4:4 removes it. Same source, same destretch, <code>pix_fmt=yuv444p</code>: chroma error drops to
+0.00 px at every phase, and the luma-vs-chroma offset measured on a disc edge goes from −2.00 px at
+4:2:0 to −0.02 px. The catch is the one in the correction above — 4:4:4 is not a delivery format
+for most players, so this is an argument for measuring in 4:4:4 and delivering in 4:2:0, not for
+shipping 4:4:4 anamorphic SD to a phone.</p>
+
+<p>The resampling cost of the extra pass is also smaller than the page previously claimed, and it
+depends entirely on how much of the scene sits near the 360 c/width ceiling. Measured as PSNR against
+the original 1920×1080 master, all comparisons forced through <code>yuv444p</code> so the chroma
+format does not enter the number:</p>
+
+<table>
+<thead><tr><th>Scene</th><th class="num">One pass</th><th class="num">Destretch 854</th><th class="num">Δ</th><th class="num">Destretch 852</th><th class="num">Δ</th></tr></thead>
+<tbody>
+<tr><td>Gradient plus text</td><td class="num">36.021</td><td class="num">36.013</td><td class="num">−0.008</td><td class="num">36.011</td><td class="num">−0.010</td></tr>
+<tr><td>Noise-heavy photo</td><td class="num">21.381</td><td class="num">21.372</td><td class="num">−0.009</td><td class="num">21.372</td><td class="num">−0.009</td></tr>
+<tr class="bad"><td>400 c/width grating</td><td class="num">14.982</td><td class="num">14.740</td><td class="num">−0.242</td><td class="num">14.737</td><td class="num">−0.245</td></tr>
+<tr class="bad"><td>Hard colour bars</td><td class="num">29.825</td><td class="num">29.587</td><td class="num">−0.238</td><td class="num">29.585</td><td class="num">−0.240</td></tr>
+</tbody>
+</table>
+
+<p>On ordinary content the second pass costs <strong>0.008–0.010 dB</strong>, not the 0.126 dB this
+page quoted before — that figure did not reproduce on any of the four scenes above, so I have left it
+alone rather than replacing it with a number I cannot defend. The cost only becomes real (−0.24 dB)
+on content sitting at or above the storage grid's ceiling, which is the same content that is already
+being destroyed by the fold in Experiment 2. So the honest version is: a two-stage destretch is free
+on real footage and measurable only on synthetic content that was never going to survive anyway.</p>
+
+<div class="callout">
+<p><strong>A number I nearly published.</strong> The first run of this comparison reported a
+<strong>+2.06 dB</strong> win for the 853-wide destretch. It was not the width — it was the pixel
+format. Comparing through <code>yuv420p</code> instead of <code>yuv444p</code> costs 2.07 dB on
+every route in this test (34.436 vs 36.509 for the one-pass upscale), which is 200× larger than any
+difference between destretch widths. A 2 dB "improvement" that tracks the pixel format is a
+measurement artefact, and it is the exact shape of error this whole page exists to warn about.</p>
+</div>
+
+<p>All of this is 0.1% territory and none of it is what makes anamorphic SD look bad. The 15.6%
+aspect error and the 360 cycles/width ceiling from Experiments 1–3 are what make it look bad. But
+the two errors are qualitatively different: the aspect error is unrecoverable, and the chroma
+quantisation is exactly one chroma sample, which is 2 px at 1080p and invisible at normal viewing
+distance on anything but a hard saturated edge. Fix the geometry first, and treat the parity of the
+destretch width as a non-issue — which is the opposite of what this page told you yesterday.</p>
+
 <h2>What this changes in practice</h2>
 
 <ol>
@@ -316,8 +442,9 @@ here including mine.</p>
 stream=sample_aspect_ratio,display_aspect_ratio</code>. If SAR is not 1:1, your two axes have
 different sample densities and every axis-blind operation is now a choice.</li>
 <li><strong>Upscale non-uniformly in one pass, and write square pixels out.</strong>
-<code>scale=1920:1080,setsar=1</code>. Destretching to 853×480 first and then upscaling costs
-0.126 dB and slightly more bytes. A two-pass that splits at 720×1080 instead measures within
+<code>scale=1920:1080,setsar=1</code>. Destretching to a square-pixel intermediate first and then upscaling costs 0.008–0.010 dB on
+ordinary content (Experiment 7) — and the intermediate width does not matter, so pick an even one
+only because the encoder wants it. A two-pass that splits at 720×1080 instead measures within
 0.006 dB of one pass — so the pass count is not what matters, the intermediate grid is.</li>
 <li><strong>Do not strip SAR and hope the player stretches.</strong> A relabelled 720×480 shows
 circles at 0.8427 — 15.7% wrong — and if any downstream tool respects the new metadata, the error
@@ -339,6 +466,77 @@ is immediately visible, while the difference between the best and worst kernel o
 under a decibel. If your frame is already square-pixel and you are choosing how far to go, the
 <a href="https://upgolab.com">upscaler at upgolab.com</a> keeps the aspect ratio locked by default —
 which is the one decision this whole page is about.</p>
+
+<h2>Reproducing the width test</h2>
+
+<p>This prints the table from Experiment 7. Write a 720×480 frame with two vertical edges 520
+square-pixels apart, then measure the distance between them after each route. The reference is
+1170 px because 520 × 2.25 = 1170 and the output is 1080 tall.</p>
+
+<pre><code>import subprocess, numpy as np, io, json
+from PIL import Image
+
+H, W = 480, 720
+SAR = 32 / 27
+
+def ff(*a):
+    r = subprocess.run([&quot;ffmpeg&quot;, &quot;-hide_banner&quot;, &quot;-loglevel&quot;, &quot;error&quot;, &quot;-y&quot;, *a],
+                       capture_output=True)
+    return r.returncode
+
+def load(p):
+    r = subprocess.run([&quot;ffmpeg&quot;, &quot;-hide_banner&quot;, &quot;-loglevel&quot;, &quot;error&quot;, &quot;-i&quot;, p,
+                        &quot;-frames:v&quot;, &quot;1&quot;, &quot;-f&quot;, &quot;image2pipe&quot;, &quot;-vcodec&quot;, &quot;png&quot;, &quot;-&quot;],
+                       capture_output=True)
+    return np.asarray(Image.open(io.BytesIO(r.stdout)).convert(&quot;RGB&quot;)).astype(float)
+
+def cross50(prof):
+    n = (prof - prof.min()) / (prof.max() - prof.min()); T = 0.5
+    for i in range(1, len(n)):
+        if n[i-1] &lt; T &lt;= n[i]:
+            return i - 1 + (T - n[i-1]) / (n[i] - n[i-1])
+
+# --- two luma edges 520 square-pixels apart ---
+rgb = np.full((H, W, 3), 60, np.uint8)
+rgb[:, int(100/SAR):int(620/SAR)] = [200, 200, 200]
+Image.fromarray(rgb).save(&quot;edges.png&quot;)
+ff(&quot;-i&quot;, &quot;edges.png&quot;, &quot;-vf&quot;, f&quot;setsar={SAR:.12f}&quot;, &quot;-c:v&quot;, &quot;ffv1&quot;,
+   &quot;-pix_fmt&quot;, &quot;yuv420p&quot;, &quot;edges.mkv&quot;)
+
+ROUTES = {
+    &quot;one pass 1920x1080&quot;:      &quot;scale=1920:1080:flags=lanczos,setsar=1&quot;,
+    &quot;destretch 852 -&gt; 1080p&quot;:  &quot;scale=852:480:flags=lanczos,setsar=1,&quot;
+                               &quot;scale=1920:1080:flags=lanczos,setsar=1&quot;,
+    &quot;destretch 854 -&gt; 1080p&quot;:  &quot;scale=854:480:flags=lanczos,setsar=1,&quot;
+                               &quot;scale=1920:1080:flags=lanczos,setsar=1&quot;,
+    &quot;strip SAR at 1620 width&quot;: &quot;scale=1620:1080:flags=lanczos,setsar=1&quot;,
+}
+print(f&quot;{&#x27;route&#x27;:24s} {&#x27;baseline px&#x27;:&gt;12s} {&#x27;error %&#x27;:&gt;9s}&quot;)
+for name, vf in ROUTES.items():
+    ff(&quot;-i&quot;, &quot;edges.mkv&quot;, &quot;-vf&quot;, vf, &quot;-pix_fmt&quot;, &quot;yuv444p&quot;, &quot;-c:v&quot;, &quot;ffv1&quot;, &quot;out.mkv&quot;)
+    probe = json.loads(subprocess.run(
+        [&quot;ffprobe&quot;, &quot;-v&quot;, &quot;error&quot;, &quot;-select_streams&quot;, &quot;v&quot;, &quot;-show_entries&quot;,
+         &quot;stream=width,height,sample_aspect_ratio&quot;, &quot;-of&quot;, &quot;json&quot;, &quot;out.mkv&quot;],
+        capture_output=True, text=True).stdout)[&quot;streams&quot;][0]
+    n, d = probe[&quot;sample_aspect_ratio&quot;].split(&quot;:&quot;)
+    sar = float(n) / float(d)
+    a = load(&quot;out.mkv&quot;)
+    g = (0.299 * a[:, :, 0] + 0.587 * a[:, :, 1] + 0.114 * a[:, :, 2])
+    prof = g[a.shape[0]//2 - 20 : a.shape[0]//2 + 20].mean(axis=0)
+    nn = (prof - prof.min()) / (prof.max() - prof.min())
+    cross = [i - 1 + abs(0.5 - nn[i-1]) / abs(nn[i] - nn[i-1])
+             for i in range(1, len(nn))
+             if (nn[i-1] &lt; 0.5 &lt;= nn[i]) or (nn[i-1] &gt;= 0.5 &gt; nn[i])]
+    base = (cross[-1] - cross[0]) * sar
+    expect = 1170.0 * probe[&quot;height&quot;] / 1080
+    print(f&quot;{name:24s} {base:12.2f} {(base-expect)/expect*100:8.3f}%&quot;)
+</code></pre>
+
+<p>Output on ffmpeg 6.1.1: one pass <strong>1170.68</strong> (+0.058%), destretch to 852
+<strong>1170.77</strong> (+0.066%), destretch to 854 <strong>1170.51</strong> (+0.043%), and
+<code>scale=1620:1080,setsar=1</code> <strong>987.78</strong> (−15.575%). The three correct routes
+agree to within 0.28 px; the SAR-stripped one is off by 182 px. Change 852 and 854 to anything even
+and the first three stay inside a quarter of a pixel — that is the whole point.</p>
 
 <h2>Reproducing it</h2>
 
