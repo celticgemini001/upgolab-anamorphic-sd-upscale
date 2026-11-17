@@ -346,7 +346,7 @@ which is the one decision this whole page is about.</p>
 trusting my output. The full measurement script:</p>
 
 <pre><code>import numpy as np, subprocess
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 W, H = 1920, 1080
 DOWN = "scale=720:480:flags=lanczos,setsar=32/27"
@@ -364,7 +364,7 @@ t = rng.normal(0, 1, (H, W)).astype(np.float32)
 ti = Image.fromarray(((t - t.min()) / t.ptp() * 255).astype(np.uint8))
 im = Image.merge("RGB", [ti, ti.rotate(90),
                          ti.transpose(Image.FLIP_LEFT_RIGHT)]).filter(
-         Image.Filter.GaussianBlur(1.1))   # Pillow 10+: ImageFilter.GaussianBlur
+         ImageFilter.GaussianBlur(1.1))
 d = ImageDraw.Draw(im)
 for i in range(18):
     x0, y0 = int(rng.integers(50, W - 500)), int(rng.integers(50, H - 200))
